@@ -28,94 +28,112 @@
   </div>
 
   <script>
-    // ⚠️ IMPORTANT: Replace below with your Cloudflare URL. 
-    // Change "https://" to "wss://" and keep the /api/room/... path!
+    // ⚠️ Keep your exact Cloudflare Worker URL here!
     const WORKER_URL = "wss://edge-chat-demo.adrianrobertai.workers.dev/api/room/squad-room/websocket";
-    
+
     console.log("[DEBUG] Attempting to connect to:", WORKER_URL);
-      const ws = new WebSocket(WORKER_URL);
-      const log = document.getElementById("chat-log");
+    const ws = new WebSocket(WORKER_URL);
+    const log = document.getElementById("chat-log");
 
-      // Debug: Connection successfully opened
-      ws.onopen = (event) => {
-        console.log("[DEBUG] 🟢 WebSocket connection successfully opened!", event);
-        const systemMsg = document.createElement("div");
-        systemMsg.className = "message";
-        systemMsg.innerHTML = "<em>🟢 Connected to server! You can start chatting.</em>";
-        log.appendChild(systemMsg);
-      };
+    function addSystemMessage(text) {
+      const div = document.createElement("div");
+      div.className = "message";
+      div.style.backgroundColor = "#e2e8f0";
+      div.style.color = "#475569";
+      div.style.fontStyle = "italic";
+      div.innerHTML = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
 
-      // Debug: Connection closed
-      ws.onclose = (event) => {
-        console.warn("[DEBUG] 🔴 WebSocket connection closed.", event);
-        const systemMsg = document.createElement("div");
-        systemMsg.className = "message";
-        systemMsg.innerHTML = `<em>🔴 Disconnected from server (Code: ${event.code}).</em>`;
-        log.appendChild(systemMsg);
-      };
+    // Connection successfully opened
+    ws.onopen = (event) => {
+      console.log("[DEBUG] 🟢 WebSocket connection opened!", event);
+      addSystemMessage("🟢 Connected to server! Type a message to join the room.");
+    };
 
-      // Debug: Connection error
-      ws.onerror = (error) => {
-        console.error("[DEBUG] ⚠️ WebSocket encountered an error:", error);
-      };
+    // Connection closed
+    ws.onclose = (event) => {
+      console.warn("[DEBUG] 🔴 WebSocket connection closed.", event);
+      addSystemMessage(`🔴 Disconnected from server (Code: ${event.code}).`);
+    };
 
-      // Listen for incoming messages
-      ws.onmessage = (event) => {
-        console.log("[DEBUG] 📩 Raw data received from server:", event.data);
-        try {
-          const data = JSON.parse(event.data);
-          console.log("[DEBUG] 📩 Parsed JSON data:", data);
+    // Connection error
+    ws.onerror = (error) => {
+      console.error("[DEBUG] ⚠️ WebSocket encountered an error:", error);
+    };
 
-          if (data.name && data.message) {
-            const div = document.createElement("div");
-            div.className = "message";
-            div.innerHTML = `<strong>${data.name}:</strong> ${data.message}`;
-            log.appendChild(div);
-            log.scrollTop = log.scrollHeight;
-          } else {
-            console.warn("[DEBUG] Received JSON, but missing 'name' or 'message' fields:", data);
-          }
-        } catch (e) {
-          console.warn("[DEBUG] Received non-JSON message from server:", event.data);
+    // Listen for incoming messages & system events
+    ws.onmessage = (event) => {
+      console.log("[DEBUG] 📩 Raw data received:", event.data);
+      try {
+        const data = JSON.parse(event.data);
+        console.log("[DEBUG] 📩 Parsed JSON:", data);
+
+        // 1. Handle someone joining the room
+        if (data.joined) {
+          addSystemMessage(`👋 <strong>${data.joined}</strong> joined the chat!`);
         }
-      };
-
-      // Send your message
-      function sendMessage() {
-        const name = document.getElementById("username").value || "Anonymous";
-        const input = document.getElementById("msg-input");
-        const text = input.value.trim();
-
-        console.log(`[DEBUG] 'Send' clicked. Name: "${name}", Message: "${text}"`);
-
-        if (text === "") {
-          console.log("[DEBUG] Message input is empty, ignoring send request.");
-          return;
+        // 2. Handle someone leaving the room
+        else if (data.quit || data.left) {
+          const leaver = data.quit || data.left;
+          addSystemMessage(`🏃 <strong>${leaver}</strong> left the chat.`);
         }
-
-        // Check if WebSocket is actually connected before sending
-        if (ws.readyState !== WebSocket.OPEN) {
-          console.error(`[DEBUG] ❌ Cannot send message! WebSocket state is ${ws.readyState} (OPEN is ${WebSocket.OPEN}).`);
-          alert("Cannot send message: Not connected to the chat server. Check your console (F12) for details.");
-          return;
+        // 3. Handle room ready confirmation
+        else if (data.ready) {
+          console.log("[DEBUG] ⚡ Room session ready!");
         }
+        // 4. Handle standard chat messages
+        else if (data.message || data.text || data.content) {
+          const sender = data.name || data.from || "Anonymous";
+          const msgText = data.message || data.text || data.content;
 
-        const payload = JSON.stringify({ name: name, message: text });
-        console.log("[DEBUG] 🚀 Sending payload to server:", payload);
-
-        try {
-          ws.send(payload);
-          input.value = ""; // Only clear input if send didn't crash
-          console.log("[DEBUG] ✅ Payload sent successfully.");
-        } catch (err) {
-          console.error("[DEBUG] ❌ Error while calling ws.send():", err);
+          const div = document.createElement("div");
+          div.className = "message";
+          div.innerHTML = `<strong>${sender}:</strong> ${msgText}`;
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight;
+        } else {
+          console.log("[DEBUG] Unhandled JSON format from server:", data);
         }
+      } catch (e) {
+        // Handle plain text messages if the server sends non-JSON strings
+        const div = document.createElement("div");
+        div.className = "message";
+        div.innerText = event.data;
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+      }
+    };
+
+    // Send your message
+    function sendMessage() {
+      const name = document.getElementById("username").value || "Anonymous";
+      const input = document.getElementById("msg-input");
+      const text = input.value.trim();
+
+      if (text === "") return;
+
+      if (ws.readyState !== WebSocket.OPEN) {
+        alert("Cannot send message: Not connected to the chat server.");
+        return;
       }
 
-      // Allow pressing "Enter" to send
-      document.getElementById("msg-input").addEventListener("keypress", (e) => {
-        if (e.key === "Enter") sendMessage();
-      });
-    </script>
+      const payload = JSON.stringify({ name: name, message: text });
+      console.log("[DEBUG] 🚀 Sending payload:", payload);
+
+      try {
+        ws.send(payload);
+        input.value = "";
+      } catch (err) {
+        console.error("[DEBUG] ❌ Error sending message:", err);
+      }
+    }
+
+    // Allow pressing "Enter" to send
+    document.getElementById("msg-input").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+  </script>
 </body>
 </html>

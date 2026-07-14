@@ -22,6 +22,7 @@
     <div id="chat-log"></div>
     <div class="input-area">
       <input type="text" id="username" placeholder="Name">
+      <button onclick="changeName()" id="name-btn" style="background: #64748b;">Set Name</button>
       <input type="text" id="msg-input" placeholder="Type a message...">
       <button onclick="sendMessage()">Send</button>
     </div>
@@ -105,6 +106,28 @@
         log.scrollTop = log.scrollHeight;
       }
     };
+
+    function changeName() {
+        const newName = document.getElementById("username").value.trim();
+        if (!newName) {
+          alert("Please enter a username first!");
+          return;
+        }
+
+        // 1. Tell the user what is happening
+        addSystemMessage(`🔄 Reconnecting as <strong>${newName}</strong>...`);
+
+        // 2. Close the old connection
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+
+        // 3. Open a new connection (the server will read the new name on your next message)
+        ws = new WebSocket(WORKER_URL);
+
+        // Re-attach all your event listeners to the new WebSocket
+        setupWebSocket(ws);
+      }
 
     // Send your message
     function sendMessage() {

@@ -32,40 +32,90 @@
     // Change "https://" to "wss://" and keep the /api/room/... path!
     const WORKER_URL = "wss://edge-chat-demo.adrianrobertai.workers.dev/api/room/squad-room/websocket";
     
-    const ws = new WebSocket(WORKER_URL);
-    const log = document.getElementById("chat-log");
+    console.log("[DEBUG] Attempting to connect to:", WORKER_URL);
+      const ws = new WebSocket(WORKER_URL);
+      const log = document.getElementById("chat-log");
 
-    // Listen for incoming messages from friends
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.name && data.message) {
-          const div = document.createElement("div");
-          div.className = "message";
-          div.innerHTML = `<strong>${data.name}:</strong> ${data.message}`;
-          log.appendChild(div);
-          log.scrollTop = log.scrollHeight; // Auto-scroll to bottom
+      // Debug: Connection successfully opened
+      ws.onopen = (event) => {
+        console.log("[DEBUG] 🟢 WebSocket connection successfully opened!", event);
+        const systemMsg = document.createElement("div");
+        systemMsg.className = "message";
+        systemMsg.innerHTML = "<em>🟢 Connected to server! You can start chatting.</em>";
+        log.appendChild(systemMsg);
+      };
+
+      // Debug: Connection closed
+      ws.onclose = (event) => {
+        console.warn("[DEBUG] 🔴 WebSocket connection closed.", event);
+        const systemMsg = document.createElement("div");
+        systemMsg.className = "message";
+        systemMsg.innerHTML = `<em>🔴 Disconnected from server (Code: ${event.code}).</em>`;
+        log.appendChild(systemMsg);
+      };
+
+      // Debug: Connection error
+      ws.onerror = (error) => {
+        console.error("[DEBUG] ⚠️ WebSocket encountered an error:", error);
+      };
+
+      // Listen for incoming messages
+      ws.onmessage = (event) => {
+        console.log("[DEBUG] 📩 Raw data received from server:", event.data);
+        try {
+          const data = JSON.parse(event.data);
+          console.log("[DEBUG] 📩 Parsed JSON data:", data);
+
+          if (data.name && data.message) {
+            const div = document.createElement("div");
+            div.className = "message";
+            div.innerHTML = `<strong>${data.name}:</strong> ${data.message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+          } else {
+            console.warn("[DEBUG] Received JSON, but missing 'name' or 'message' fields:", data);
+          }
+        } catch (e) {
+          console.warn("[DEBUG] Received non-JSON message from server:", event.data);
         }
-      } catch (e) {
-        console.log("Received non-JSON system message:", event.data);
-      }
-    };
+      };
 
-    // Send your message to the Cloudflare backend
-    function sendMessage() {
-      const name = document.getElementById("username").value || "Anonymous";
-      const input = document.getElementById("msg-input");
-      if (input.value.trim() !== "") {
-        const payload = JSON.stringify({ name: name, message: input.value });
-        ws.send(payload);
-        input.value = ""; // Clear input box
-      }
-    }
+      // Send your message
+      function sendMessage() {
+        const name = document.getElementById("username").value || "Anonymous";
+        const input = document.getElementById("msg-input");
+        const text = input.value.trim();
 
-    // Allow pressing "Enter" to send
-    document.getElementById("msg-input").addEventListener("keypress", (e) => {
-      if (e.key === "Enter") sendMessage();
-    });
-  </script>
+        console.log(`[DEBUG] 'Send' clicked. Name: "${name}", Message: "${text}"`);
+
+        if (text === "") {
+          console.log("[DEBUG] Message input is empty, ignoring send request.");
+          return;
+        }
+
+        // Check if WebSocket is actually connected before sending
+        if (ws.readyState !== WebSocket.OPEN) {
+          console.error(`[DEBUG] ❌ Cannot send message! WebSocket state is ${ws.readyState} (OPEN is ${WebSocket.OPEN}).`);
+          alert("Cannot send message: Not connected to the chat server. Check your console (F12) for details.");
+          return;
+        }
+
+        const payload = JSON.stringify({ name: name, message: text });
+        console.log("[DEBUG] 🚀 Sending payload to server:", payload);
+
+        try {
+          ws.send(payload);
+          input.value = ""; // Only clear input if send didn't crash
+          console.log("[DEBUG] ✅ Payload sent successfully.");
+        } catch (err) {
+          console.error("[DEBUG] ❌ Error while calling ws.send():", err);
+        }
+      }
+
+      // Allow pressing "Enter" to send
+      document.getElementById("msg-input").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") sendMessage();
+      });
+    </script>
 </body>
 </html>

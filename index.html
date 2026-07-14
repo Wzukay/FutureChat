@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Friend Group Chat</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; background: #f4f4f9; }
+    .chat-container { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    #chat-log { border: 1px solid #e2e8f0; height: 350px; overflow-y: scroll; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; background: #fafafa; }
+    .message { margin: 0.5rem 0; padding: 0.5rem; border-radius: 6px; background: #f1f5f9; }
+    .input-area { display: flex; gap: 0.5rem; }
+    input { padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 1rem; }
+    #username { width: 110px; }
+    #msg-input { flex: 1; }
+    button { padding: 0.75rem 1.5rem; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <h2>💬 Our Squad Chat</h2>
+    <div id="chat-log"></div>
+    <div class="input-area">
+      <input type="text" id="username" placeholder="Name">
+      <input type="text" id="msg-input" placeholder="Type a message...">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ⚠️ IMPORTANT: Replace below with your Cloudflare URL. 
+    // Change "https://" to "wss://" and keep the /api/room/... path!
+    const WORKER_URL = "wss://edge-chat-demo.adrianrobertai.workers.dev/api/room/squad-room/websocket";
+    
+    const ws = new WebSocket(WORKER_URL);
+    const log = document.getElementById("chat-log");
+
+    // Listen for incoming messages from friends
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.name && data.message) {
+          const div = document.createElement("div");
+          div.className = "message";
+          div.innerHTML = `<strong>${data.name}:</strong> ${data.message}`;
+          log.appendChild(div);
+          log.scrollTop = log.scrollHeight; // Auto-scroll to bottom
+        }
+      } catch (e) {
+        console.log("Received non-JSON system message:", event.data);
+      }
+    };
+
+    // Send your message to the Cloudflare backend
+    function sendMessage() {
+      const name = document.getElementById("username").value || "Anonymous";
+      const input = document.getElementById("msg-input");
+      if (input.value.trim() !== "") {
+        const payload = JSON.stringify({ name: name, message: input.value });
+        ws.send(payload);
+        input.value = ""; // Clear input box
+      }
+    }
+
+    // Allow pressing "Enter" to send
+    document.getElementById("msg-input").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+  </script>
+</body>
+</html>
